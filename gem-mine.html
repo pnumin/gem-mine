@@ -95,7 +95,7 @@ button.primary { background: linear-gradient(180deg, var(--gold), var(--gold-dee
     <span class="spacer"></span>
     <button class="primary" id="newGame">새 게임</button>
   </div>
-  <p class="help">같은 보석 3개 이상을 가로나 세로로 맞추세요. 보석을 클릭한 뒤 옆 보석을 클릭하거나, 드래그해서 자리를 바꿉니다. 4개, 5개를 맞추거나 연쇄가 이어지면 점수가 크게 오릅니다.</p>
+  <p class="help">같은 보석 3개 이상을 가로나 세로로 맞추거나, 2×2 사각형으로 모으세요(사각형 100점). 보석을 클릭한 뒤 옆 보석을 클릭하거나, 드래그해서 자리를 바꿉니다. 4개, 5개를 맞추거나 연쇄가 이어지면 점수가 크게 오릅니다.</p>
 </div>
 
 <script>
@@ -207,7 +207,8 @@ const rnd = n => Math.floor(Math.random() * n);
 const gem = (t, c, y) => ({ t, x: c, y, vy: 0, s: 1 });
 
 function wouldMatch(T, r, c, t) {
-  return (c >= 2 && T[r][c - 1] === t && T[r][c - 2] === t) || (r >= 2 && T[r - 1][c] === t && T[r - 2][c] === t);
+  return (c >= 2 && T[r][c - 1] === t && T[r][c - 2] === t) || (r >= 2 && T[r - 1][c] === t && T[r - 2][c] === t)
+    || (r >= 1 && c >= 1 && T[r - 1][c] === t && T[r][c - 1] === t && T[r - 1][c - 1] === t);
 }
 function freshTypes() {
   let T;
@@ -229,7 +230,14 @@ function lineAt(T, r, c) {
   for (k = c + 1; k < N && T[r][k] === t; k++) h++;
   for (k = r - 1; k >= 0 && T[k][c] === t; k--) v++;
   for (k = r + 1; k < N && T[k][c] === t; k++) v++;
-  return h >= 3 || v >= 3;
+  if (h >= 3 || v >= 3) return true;
+  // 2×2 square containing (r, c)
+  for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    const r2 = r + dr, c2 = c + dc;
+    if (r2 < 0 || r2 >= N || c2 < 0 || c2 >= N) continue;
+    if (T[r2][c] === t && T[r][c2] === t && T[r2][c2] === t) return true;
+  }
+  return false;
 }
 function findMove(T) {
   T = T || grid.map(row => row.map(g => g.t));
@@ -260,6 +268,15 @@ function findMatches() {
       if (r < N && t(r, c) >= 0 && t(r, c) === t(r - 1, c)) run++;
       else { if (run >= 3) { const g = []; for (let k = r - run; k < r; k++) { g.push([k, c]); cells.add(k * N + c); } groups.push(g); } run = 1; }
     }
+  }
+  // 2×2 squares of the same gem
+  for (let r = 0; r < N - 1; r++) for (let c = 0; c < N - 1; c++) {
+    const v = t(r, c);
+    if (v < 0 || t(r, c + 1) !== v || t(r + 1, c) !== v || t(r + 1, c + 1) !== v) continue;
+    const g = [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]];
+    g.square = true;
+    g.forEach(([a, b]) => cells.add(a * N + b));
+    groups.push(g);
   }
   return { cells, groups };
 }
@@ -342,7 +359,7 @@ function clearMatches(m) {
   let gained = 0;
   for (const g of m.groups) {
     const len = g.length;
-    const pts = 10 * len * (len - 2) * combo; // 3→30, 4→80, 5→150, × chain
+    const pts = (g.square ? 100 : 10 * len * (len - 2)) * combo; // line 3→30, 4→80, 5→150; square 100; × chain
     gained += pts;
     const [r0, c0] = g[0], [r1, c1] = g[g.length - 1];
     popups.push({ x: (c0 + c1) / 2 + .5, y: (r0 + r1) / 2 + .5, text: '+' + pts, life: 1, big: len >= 4 });
